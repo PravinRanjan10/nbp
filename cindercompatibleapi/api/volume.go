@@ -54,8 +54,8 @@ func (portal *VolumePortal) ListVolumesDetails() {
 		log.Error(reason)
 		return
 	}
-
 	result := converter.ListVolumesDetailsResp(volumes)
+	//result:= "anc"
 	body, err := json.Marshal(result)
 	if err != nil {
 		reason := fmt.Sprintf("List accessible volumes with details, marshal result failed: %v", err)

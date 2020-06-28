@@ -19,8 +19,19 @@ This module implements the common data structure.
 
 package model
 
+import csi "github.com/container-storage-interface/spec/lib/go/csi"
 // VolumeSpec is an block device created by storage service, it can be attached
 // to physical machine or virtual machine instance.
+
+type CsiVolumeSpec struct {
+	*BaseModel
+	// The name of the volume.
+	Name string `json:"name,omitempty"`
+	// Default unit of volume Size is GB.
+	Size int64 `json:"size,omitempty"`
+	*csi.CreateVolumeRequest
+}
+
 type VolumeSpec struct {
 	*BaseModel
 

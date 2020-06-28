@@ -54,14 +54,14 @@ csi.file.opensds: prebuild
 #	go build -ldflags '-w -s' -o $(BUILD_DIR)/service-broker github.com/sodafoundation/nbp/service-broker/cmd/service-broker
 
 cindercompatibleapi: prebuild
-	go build -ldflags '-w -s' -o $(BUILD_DIR)/cindercompatibleapi github.com/sodafoundation/nbp/cindercompatibleapi
+	#go build -ldflags '-w -s' -o $(BUILD_DIR)/cindercompatibleapi github.com/sodafoundation/nbp/cindercompatibleapi
 
 docker: build
 	cp $(BUILD_DIR)/csi.block.opensds ./csi/
 	cp $(BUILD_DIR)/csi.file.opensds ./csi/
 #	cp $(BUILD_DIR)/service-broker ./service-broker/cmd/service-broker
 	docker build -f csi/cmd/block/Dockerfile -t sodafoundation/csiplugin-block:$(IMAGE_TAG) csi
-	docker build -f csi/cmd/file/Dockerfile -t sodafoundation/csiplugin-file:$(IMAGE_TAG) csi
+	#docker build -f csi/cmd/file/Dockerfile -t sodafoundation/csiplugin-file:$(IMAGE_TAG) csi
 #	docker build service-broker/cmd/service-broker -t opensdsio/service-broker:$(IMAGE_TAG)
 
 goimports:

@@ -26,6 +26,8 @@ import (
 // could be discussed if it's better to define an interface.
 type VolumeBuilder *model.VolumeSpec
 
+type CsiVolumeBuilder *model.CsiVolumeSpec
+
 // ExtendVolumeBuilder contains request body of handling a extend volume request.
 // Currently it's assigned as the pointer of ExtendVolumeSpec struct, but it
 // could be discussed if it's better to define an interface.
@@ -63,8 +65,8 @@ type VolumeMgr struct {
 }
 
 // CreateVolume
-func (v *VolumeMgr) CreateVolume(body VolumeBuilder) (*model.VolumeSpec, error) {
-	var res model.VolumeSpec
+func (v *VolumeMgr) CreateVolume(body CsiVolumeBuilder) (*model.CsiVolumeSpec, error) {
+	var res model.CsiVolumeSpec
 	url := strings.Join([]string{
 		v.Endpoint,
 		urls.GenerateVolumeURL(urls.Client, v.TenantId)}, "/")
@@ -91,7 +93,7 @@ func (v *VolumeMgr) GetVolume(volID string) (*model.VolumeSpec, error) {
 }
 
 // ListVolumes
-func (v *VolumeMgr) ListVolumes(args ...interface{}) ([]*model.VolumeSpec, error) {
+func (v *VolumeMgr) ListVolumes(args ...interface{}) ([]*model.CsiVolumeSpec, error) {
 	url := strings.Join([]string{
 		v.Endpoint,
 		urls.GenerateVolumeURL(urls.Client, v.TenantId)}, "/")
@@ -105,7 +107,7 @@ func (v *VolumeMgr) ListVolumes(args ...interface{}) ([]*model.VolumeSpec, error
 		url += "?" + param
 	}
 
-	var res []*model.VolumeSpec
+	var res []*model.CsiVolumeSpec
 	if err := v.Recv(url, "GET", nil, &res); err != nil {
 		return nil, err
 	}

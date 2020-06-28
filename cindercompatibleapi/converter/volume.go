@@ -78,7 +78,7 @@ type ListRespVolumeDetails struct {
 }
 
 // ListVolumesDetailsResp ...
-func ListVolumesDetailsResp(volumes []*model.VolumeSpec) *ListVolumesDetailsRespSpec {
+func ListVolumesDetailsResp(volumes []*model.CsiVolumeSpec) *ListVolumesDetailsRespSpec {
 	var resp ListVolumesDetailsRespSpec
 	var cinderVolume ListRespVolumeDetails
 
@@ -88,18 +88,18 @@ func ListVolumesDetailsResp(volumes []*model.VolumeSpec) *ListVolumesDetailsResp
 		for _, volume := range volumes {
 
 			cinderVolume.Attachments = make([]RespAttachment, 0, 0)
-			cinderVolume.AvailabilityZone = volume.AvailabilityZone
+			//cinderVolume.AvailabilityZone = volume.AvailabilityZone
 			cinderVolume.UpdatedAt = volume.BaseModel.UpdatedAt
 			cinderVolume.ID = volume.BaseModel.Id
 			cinderVolume.Size = volume.Size
-			cinderVolume.UserID = volume.UserId
+			//cinderVolume.UserID = volume.UserId
 			cinderVolume.Metadata = make(map[string]string)
 			//cinderVolume.TenantID = volume.TenantId
-			cinderVolume.Status = volume.Status
-			cinderVolume.Description = volume.Description
+			//cinderVolume.Status = volume.Status
+			//cinderVolume.Description = volume.Description
 			cinderVolume.Name = volume.Name
 			cinderVolume.CreatedAt = volume.BaseModel.CreatedAt
-			cinderVolume.VolumeType = volume.ProfileId
+			//cinderVolume.VolumeType = volume.ProfileId
 
 			resp.Volumes = append(resp.Volumes, cinderVolume)
 		}

@@ -17,17 +17,17 @@ package block
 import (
 	"errors"
 	"fmt"
+	"github.com/kubernetes-incubator/external-storage/lib/util"
 	"os/exec"
 	"strings"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/golang/glog"
-	"github.com/sodafoundation/nbp/csi/common"
-	"github.com/sodafoundation/nbp/csi/util"
-	nbputil "github.com/sodafoundation/nbp/util"
 	"github.com/sodafoundation/api/client"
-	"github.com/sodafoundation/dock/contrib/connector"
 	"github.com/sodafoundation/api/pkg/model"
+	"github.com/sodafoundation/dock/contrib/connector"
+	"github.com/sodafoundation/nbp/csi/common"
+	nbputil "github.com/sodafoundation/nbp/util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -40,46 +40,18 @@ func NewVolume(c *client.Client) *Volume {
 	return &Volume{Client: c}
 }
 
+
 // CreateVolume implementation
 func (v *Volume) CreateVolume(req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 	// build volume body
-	volumebody := &model.VolumeSpec{}
-	volumebody.Name = req.GetName()
-	var secondaryAZ = util.OpensdsDefaultSecondaryAZ
-	var enableReplication = false
-	var attachMode = "rw"
+
+	volumebody := &model.CsiVolumeSpec{}
+	volumebody.CreateVolumeRequest = req
 	glog.V(5).Infof("create volume parameters %+v", req.GetParameters())
-	for k, v := range req.GetParameters() {
-		switch k {
-		case common.ParamProfile:
-			if v == "" {
-				msg := "profile id cannot be empty"
-				glog.Error(msg)
-				return nil, status.Error(codes.InvalidArgument, msg)
-			}
-			volumebody.ProfileId = v
-		case common.ParamEnableReplication:
-			if strings.ToLower(v) == "true" {
-				enableReplication = true
-			}
-		case common.ParamSecondaryAZ:
-			secondaryAZ = v
-		case common.PublishAttachMode:
-			if strings.ToLower(v) == "ro" {
-				attachMode = "ro"
-			}
-		}
-	}
-
-	size := common.GetSize(req.GetCapacityRange())
-	volumebody.Size = size
-
-	if req.GetAccessibilityRequirements() != nil {
-		volumebody.AvailabilityZone = common.GetZone(req.GetAccessibilityRequirements(), TopologyZoneKey)
-	}
-
+	glog.V(5).Infof("Pravin...create volume parameters %+v", req.GetParameters())
 	glog.V(5).Infof("volume body: %+v", volumebody)
-
+    volumebody.Name = req.GetName()
+    volumebody.Size = 2
 	volExist, err := v.FindVolume(volumebody.Name)
 	if err != nil {
 		return nil, err
@@ -93,37 +65,16 @@ func (v *Volume) CreateVolume(req *csi.CreateVolumeRequest) (*csi.CreateVolumeRe
 			return nil, status.Error(codes.Internal, msg)
 		}
 	}
-
-	glog.V(5).Info("waiting until volume is created")
-	volStable, err := common.WaitForStatusStable(volExist.Id, func(id string) (interface{}, error) {
-		return v.Client.GetVolume(id)
-	})
-
-	if err != nil {
-		msg := fmt.Sprintf("failed to create volume: %v", err)
-		glog.Error(msg)
-		return nil, status.Error(codes.Internal, msg)
-	}
-
-	vol := volStable.(*model.VolumeSpec)
-	// return volume info
 	volumeinfo := &csi.Volume{
-		CapacityBytes: vol.Size * util.GiB,
-		VolumeId:      vol.Id,
+		CapacityBytes: 1 * util.GiB,
 		VolumeContext: map[string]string{
-			VolumeName:               vol.Name,
-			VolumeStatus:             vol.Status,
-			VolumeAZ:                 vol.AvailabilityZone,
-			VolumePoolId:             vol.PoolId,
-			VolumeProfileId:          vol.ProfileId,
-			VolumeLvPath:             vol.Metadata["lvPath"],
-			common.PublishAttachMode: attachMode,
+			VolumeName: req.GetName(),
 		},
 
 		AccessibleTopology: []*csi.Topology{
 			{
 				Segments: map[string]string{
-					TopologyZoneKey: volumebody.AvailabilityZone,
+					TopologyZoneKey: "default",
 				},
 			},
 		},
@@ -131,49 +82,148 @@ func (v *Volume) CreateVolume(req *csi.CreateVolumeRequest) (*csi.CreateVolumeRe
 
 	glog.V(5).Infof("response volume info = %+v", volumeinfo)
 
-	if enableReplication && volExist == nil {
-		volumebody.AvailabilityZone = secondaryAZ
-		volumebody.Name = SecondaryPrefix + req.Name
-		sVol, err := v.Client.CreateVolume(volumebody)
-		if err != nil {
-			msg := fmt.Sprintf("failed to create second volume: %v", err)
-			glog.Error(msg)
-			return nil, status.Error(codes.Internal, msg)
-		}
-
-		_, err = common.WaitForStatusStable(sVol.Id, func(id string) (interface{}, error) {
-			return v.Client.GetVolume(id)
-		})
-
-		if err != nil {
-			msg := fmt.Sprintf("failed to create volume: %v", err)
-			glog.Error(msg)
-			return nil, status.Error(codes.Internal, msg)
-		}
-
-		replicaBody := &model.ReplicationSpec{
-			Name:              req.Name,
-			PrimaryVolumeId:   vol.Id,
-			SecondaryVolumeId: sVol.Id,
-			ReplicationMode:   model.ReplicationModeSync,
-			ReplicationPeriod: 0,
-		}
-		replicaResp, err := v.Client.CreateReplication(replicaBody)
-		if err != nil {
-			msg := fmt.Sprintf("create replication failed: %v", err)
-			glog.Errorf(msg)
-			return nil, status.Error(codes.Internal, msg)
-		}
-		volumeinfo.VolumeContext[VolumeReplicationId] = replicaResp.Id
-	}
-
 	return &csi.CreateVolumeResponse{
 		Volume: volumeinfo,
 	}, nil
 }
 
+
+//// CreateVolume implementation
+//func (v *Volume) CreateOpensdsVolume(req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
+//	// build volume body
+//
+//	volumebody := &model.VolumeSpec{}
+//	volumebody.Name = req.GetName()
+//	var secondaryAZ = util.OpensdsDefaultSecondaryAZ
+//	var enableReplication = false
+//	var attachMode = "rw"
+//	glog.V(5).Infof("create volume parameters %+v", req.GetParameters())
+//	glog.V(5).Infof("Pravin...create volume parameters %+v", req.GetParameters())
+//	for k, v := range req.GetParameters() {
+//		switch k {
+//		case common.ParamProfile:
+//			if v == "" {
+//				msg := "profile id cannot be empty"
+//				glog.Error(msg)
+//				return nil, status.Error(codes.InvalidArgument, msg)
+//			}
+//			volumebody.ProfileId = v
+//		case common.ParamEnableReplication:
+//			if strings.ToLower(v) == "true" {
+//				enableReplication = true
+//			}
+//		case common.ParamSecondaryAZ:
+//			secondaryAZ = v
+//		case common.PublishAttachMode:
+//			if strings.ToLower(v) == "ro" {
+//				attachMode = "ro"
+//			}
+//		}
+//	}
+//
+//	size := common.GetSize(req.GetCapacityRange())
+//	volumebody.Size = size
+//
+//	if req.GetAccessibilityRequirements() != nil {
+//		volumebody.AvailabilityZone = common.GetZone(req.GetAccessibilityRequirements(), TopologyZoneKey)
+//	}
+//
+//	glog.V(5).Infof("volume body: %+v", volumebody)
+//
+//	volExist, err := v.FindVolume(volumebody.Name)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	if volExist == nil {
+//		volExist, err = v.Client.CreateVolume(volumebody)
+//		if err != nil {
+//			msg := fmt.Sprintf("create volume failed: %v", err)
+//			glog.Error(msg)
+//			return nil, status.Error(codes.Internal, msg)
+//		}
+//	}
+//
+//	glog.V(5).Info("waiting until volume is created")
+//	volStable, err := common.WaitForStatusStable(volExist.Id, func(id string) (interface{}, error) {
+//		return v.Client.GetVolume(id)
+//	})
+//
+//	if err != nil {
+//		msg := fmt.Sprintf("failed to create volume: %v", err)
+//		glog.Error(msg)
+//		return nil, status.Error(codes.Internal, msg)
+//	}
+//
+//	vol := volStable.(*model.VolumeSpec)
+//	// return volume info
+//	volumeinfo := &csi.Volume{
+//		CapacityBytes: vol.Size * util.GiB,
+//		VolumeId:      vol.Id,
+//		VolumeContext: map[string]string{
+//			VolumeName:               vol.Name,
+//			VolumeStatus:             vol.Status,
+//			VolumeAZ:                 vol.AvailabilityZone,
+//			VolumePoolId:             vol.PoolId,
+//			VolumeProfileId:          vol.ProfileId,
+//			VolumeLvPath:             vol.Metadata["lvPath"],
+//			common.PublishAttachMode: attachMode,
+//		},
+//
+//		AccessibleTopology: []*csi.Topology{
+//			{
+//				Segments: map[string]string{
+//					TopologyZoneKey: volumebody.AvailabilityZone,
+//				},
+//			},
+//		},
+//	}
+//
+//	glog.V(5).Infof("response volume info = %+v", volumeinfo)
+//
+//	if enableReplication && volExist == nil {
+//		volumebody.AvailabilityZone = secondaryAZ
+//		volumebody.Name = SecondaryPrefix + req.Name
+//		sVol, err := v.Client.CreateVolume(volumebody)
+//		if err != nil {
+//			msg := fmt.Sprintf("failed to create second volume: %v", err)
+//			glog.Error(msg)
+//			return nil, status.Error(codes.Internal, msg)
+//		}
+//
+//		_, err = common.WaitForStatusStable(sVol.Id, func(id string) (interface{}, error) {
+//			return v.Client.GetVolume(id)
+//		})
+//
+//		if err != nil {
+//			msg := fmt.Sprintf("failed to create volume: %v", err)
+//			glog.Error(msg)
+//			return nil, status.Error(codes.Internal, msg)
+//		}
+//
+//		replicaBody := &model.ReplicationSpec{
+//			Name:              req.Name,
+//			PrimaryVolumeId:   vol.Id,
+//			SecondaryVolumeId: sVol.Id,
+//			ReplicationMode:   model.ReplicationModeSync,
+//			ReplicationPeriod: 0,
+//		}
+//		replicaResp, err := v.Client.CreateReplication(replicaBody)
+//		if err != nil {
+//			msg := fmt.Sprintf("create replication failed: %v", err)
+//			glog.Errorf(msg)
+//			return nil, status.Error(codes.Internal, msg)
+//		}
+//		volumeinfo.VolumeContext[VolumeReplicationId] = replicaResp.Id
+//	}
+//
+//	return &csi.CreateVolumeResponse{
+//		Volume: volumeinfo,
+//	}, nil
+//}
+
 // FindVolume implementation
-func (v *Volume) FindVolume(volName string) (*model.VolumeSpec, error) {
+func (v *Volume) FindVolume(volName string) (*model.CsiVolumeSpec, error) {
 	volumes, err := v.Client.ListVolumes()
 	if err != nil {
 		msg := fmt.Sprintf("list volumes failed: %v", err)
@@ -441,10 +491,10 @@ func (v *Volume) ListVolumes(req *csi.ListVolumesRequest) (*csi.ListVolumesRespo
 				VolumeId:      v.Id,
 				VolumeContext: map[string]string{
 					"Name":             v.Name,
-					"Status":           v.Status,
-					"AvailabilityZone": v.AvailabilityZone,
-					"PoolId":           v.PoolId,
-					"ProfileId":        v.ProfileId,
+					//"Status":           v.Status,
+					//"AvailabilityZone": v.AvailabilityZone,
+					//"PoolId":           v.PoolId,
+					//"ProfileId":        v.ProfileId,
 				},
 			}
 
